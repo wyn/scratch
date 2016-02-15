@@ -241,9 +241,60 @@ instance Functor (FunArg s) where
 instance Comonad (FunArg s) where
   extract (sf :# s) = sf s
   extend f (sf :# s) = (\s' -> f (sf :# s')) :# s
-
+  
+-- TODO dont really understand this one
 runFA :: (FunArg Int a -> b) -> Stream a -> Stream b
 runFA k as = runFA' k (str2fun as :# 0)
   where
     runFA' k' d@(f :# i) = k' d :< runFA' k' (f :# (i + 1))
+
+-- List the other way around
+data List a = Nil | List a :> a
+-- a non empty list type
+data LV a = List a := a
+-- past := value :| future
+data LVS a = LV a :| Stream a
+
+instance Functor List where
+  fmap f Nil = Nil
+  fmap f (as :> a) = fmap f as :> f a
+
+instance Functor LV where
+  fmap f (as := a) = fmap f as := f a
+  
+instance Functor LVS where
+  fmap f (az :| as) = fmap f az :| fmap f as
+  
+instance Comonad LVS where
+  extract ((_ := a) :| _) = a
+  --            List       value    Stream
+  extend k d = cobindL d := k d :| cobindS d
+    where
+      cobindL (Nil        := _  :|  _      ) = Nil
+      cobindL ((az :> a') := a  :|  as     ) = cobindL d' :> k d'
+        where -- see how the a' a have been moved to the right
+          d' =  az        := a' :| (a :< as)
+      cobindS (az      := a  :| (a' :< as')) = k d' :< cobindS d'
+        where -- see how the a a' have been moved to the left
+          d' = az :> a := a' :| as'
+
+runLVS :: (LVS a -> b) -> Stream a -> Stream b
+runLVS k (a' :< as') = runLVS' k (Nil := a' :| as')
+  where
+    runLVS' k' d@(az := a :| (a'' :< as'')) =
+      k' d :< runLVS' k' (az :> a := a'' :| as'')
+
+fbyFA :: a -> (FunArg Int a -> a)
+fbyFA a0 (f :# 0) = a0
+fbyFA _ (f :# i) = f (i-1)
+
+fbyLVS :: a -> (LVS a -> a)
+fbyLVS a0 (Nil := _ :| _) = a0
+fbyLVS _ ((_ :> a') := _ :| _) = a'
+
+nextFA :: FunArg Int a -> a
+nextFA (f :# i) = f (i+1)
+
+nextLVS :: LVS a -> a
+nextLVS (_ := _ :| (a :< _)) = a
 
