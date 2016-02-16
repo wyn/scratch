@@ -298,3 +298,16 @@ nextFA (f :# i) = f (i+1)
 nextLVS :: LVS a -> a
 nextLVS (_ := _ :| (a :< _)) = a
 
+
+instance Comonad LV where
+  extract (_ := a) = a
+  extend k d@(az := _) = cobindL k az := k d
+    where
+      cobindL _ Nil = Nil
+      cobindL k' (az' :> a) = cobindL k' az' :> k' (az' := a)
+
+fbyLV :: a -> (LV a -> a)
+fbyLV a0 (Nil := _) = a0
+fbyLV _ ((_ :> a) := _) = a
+
+
